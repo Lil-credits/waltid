@@ -1,3 +1,5 @@
+version: '3.9'
+
 services:
   wallet-api:
     image: docker.io/waltid/wallet-api:${VERSION_TAG:-latest}
@@ -16,6 +18,8 @@ services:
       - ./wallet-api/config:/waltid-wallet-api/config
       - ./wallet-api/walt.yaml:/waltid-wallet-api/walt.yaml
       - ./wallet-api/data:/waltid-wallet-api/data
+    networks:
+      - epos
 
   issuer-api:
     platform: linux/x86_64
@@ -27,6 +31,8 @@ services:
       - .env
     volumes:
       - ./issuer-api/config:/waltid-issuer-api/config
+    networks:
+      - epos
 
   verifier-api:
     platform: linux/x86_64
@@ -38,6 +44,8 @@ services:
       - .env
     volumes:
       - ./verifier-api/config:/waltid-verifier-api/config
+    networks:
+      - epos
 
   waltid-web-wallet:
     image: docker.io/waltid/waltid-web-wallet:${VERSION_TAG:-latest}
@@ -48,6 +56,8 @@ services:
     environment:
       NUXT_PUBLIC_ISSUER_CALLBACK_URL: "http://localhost:$WALLET_FRONTEND_PORT"
       PORT: $WALLET_FRONTEND_PORT
+    networks:
+      - epos
 
   web-portal:
     platform: linux/x86_64
@@ -61,6 +71,8 @@ services:
       NEXT_PUBLIC_VERIFIER: "http://localhost:$VERIFIER_API_PORT"
       NEXT_PUBLIC_WALLET: "http://localhost:$WALLET_FRONTEND_PORT"
       PORT: $WEB_PORTAL_PORT
+    networks:
+      - epos
 
   vc-repo:
     platform: linux/x86_64
@@ -70,13 +82,16 @@ services:
       - caddy
     environment:
       PORT: $VC_REPO_PORT
+    networks:
+      - epos
 
-  # sqlite fake service
   sqlite:
     image: alpine
     profiles:
-        -   sqlite
+      - sqlite
     entrypoint: [ "/bin/sh", "-c", "exit 0" ]
+    networks:
+      - epos
 
   postgres-engine:
     image: postgres:alpine
@@ -94,17 +109,20 @@ services:
       - wallet-api-db:/waltid-wallet-api/data
       - ./postgres/postgres-db-init.sh:/docker-entrypoint-initdb.d/postgres-db-init.sh
     ports:
-      - $POSTGRES_DB_PORT:$POSTGRES_DB_PORT #TODO: tcp/udp proxy with caddy
+      - $POSTGRES_DB_PORT:$POSTGRES_DB_PORT
+    networks:
+      - epos
 
-  # postgres-proxy-service
   postgres:
     image: alpine
     profiles:
-        -   postgres
+      - postgres
     entrypoint: [ "/bin/sh", "-c", "exit 0" ]
     depends_on:
       postgres-engine:
         condition: "service_healthy"
+    networks:
+      - epos
 
   phpmyadmin:
     image: dpage/pgadmin4
@@ -118,6 +136,8 @@ services:
     volumes:
       - pgadmin:/waltid-wallet-api/data/pgadmin
     restart: always
+    networks:
+      - epos
 
   mssql-engine:
     image: mcr.microsoft.com/azure-sql-edge
@@ -133,8 +153,9 @@ services:
       - ./mssql/mssql.env
     ports:
       - $MSSQL_DB_PORT:$MSSQL_DB_PORT
+    networks:
+      - epos
 
-  # mssql-proxy-service
   mssql:
     image: mcr.microsoft.com/azure-sql-edge
     profiles:
@@ -152,6 +173,8 @@ services:
       /opt/mssql-tools/bin/sqlcmd -S mssql-engine -U sa -P $MSSQL_SA_PWD -i /docker-entrypoint-initdb.d/mssql-db-init.sql;
       echo "Configuration complete";
       '
+    networks:
+      - epos
 
   caddy:
     image: docker.io/caddy:2
@@ -161,44 +184,43 @@ services:
     cap_add:
       - NET_ADMIN
     ports:
-
       - target: "$WALLET_BACKEND_PORT"
-        published: $WALLET_BACKEND_PORT # wallet-api
+        published: $WALLET_BACKEND_PORT
         protocol: tcp
         mode: host
-
       - target: "$ISSUER_API_PORT"
-        published: $ISSUER_API_PORT # issuer-api
+        published: $ISSUER_API_PORT
         protocol: tcp
         mode: host
-
       - target: "$VERIFIER_API_PORT"
-        published: $VERIFIER_API_PORT # verifier-api
+        published: $VERIFIER_API_PORT
         protocol: tcp
         mode: host
-
       - target: "$WALLET_FRONTEND_PORT"
-        published: $WALLET_FRONTEND_PORT # waltid-web-wallet
+        published: $WALLET_FRONTEND_PORT
         protocol: tcp
         mode: host
-
       - target: "$WEB_PORTAL_PORT"
-        published: $WEB_PORTAL_PORT # web-portal
+        published: $WEB_PORTAL_PORT
         protocol: tcp
         mode: host
-
       - target: "$VC_REPO_PORT"
-        published: $VC_REPO_PORT # vc-repo
+        published: $VC_REPO_PORT
         protocol: tcp
         mode: host
-
       - target: "$PG_ADMIN_PORT"
-        published: $PG_ADMIN_PORT # pg-admin
+        published: $PG_ADMIN_PORT
         protocol: tcp
         mode: host
-
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
+    networks:
+      - epos
+
 volumes:
   wallet-api-db:
   pgadmin:
+
+networks:
+  epos:
+    external: true
